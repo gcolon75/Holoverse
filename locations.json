@@ -1,0 +1,192 @@
+{
+  "quiet_lanterns_inn": {
+    "id": "quiet_lanterns_inn",
+    "name": "House of Quiet Lanterns",
+    "region": "coastal_east",
+    "type": "inn_safehouse",
+    "description": "A salt-weathered inn on the eastern coast, running lanterns guttered low. The kind of place that exists specifically to not be remembered. The floorboards remember every watcher who waited here.",
+    "atmosphere": ["dim", "coastal", "secretive", "watched"],
+    "connections": ["tide_chapel_road", "eastern_harbor"],
+    "npcs_present": ["sister_ilyne_varrow"],
+    "faction_presence": {"veiled_throne": "active", "black_tide": "monitoring"},
+    "access": "open",
+    "notable": ["secret_room_below_cellar", "tide_prayer_scratched_into_beams"]
+  },
+  "tide_chapel_sanctum": {
+    "id": "tide_chapel_sanctum",
+    "name": "Tide Chapel / Blood Sanctum",
+    "region": "coastal_east",
+    "type": "ritual_site",
+    "description": "A collapsed chapel whose lower sanctum is still sealed by blood-law. The upper floor smells of brine and rot. Below, the stone is dry and very old, and the air has not moved in decades.",
+    "atmosphere": ["ancient", "sealed", "ritual", "dangerous"],
+    "connections": ["quiet_lanterns_inn", "western_cliffs_road"],
+    "npcs_present": [],
+    "faction_presence": {"saint_vaelor_old_tide_law": "dormant"},
+    "access": "blood_keyed",
+    "notable": ["bronze_casket_recovered", "lady_merrow_vale_encountered", "sanctum_now_empty"]
+  },
+  "western_cliffs_road": {
+    "id": "western_cliffs_road",
+    "name": "Western Cliffs Road",
+    "region": "coastal_midlands",
+    "type": "travel_route",
+    "description": "A coast road cut into chalk cliffs above grey water. Wind comes off the sea in flat sheets. The road is old enough that the stones have begun returning to their original angles.",
+    "atmosphere": ["exposed", "cold", "coastal", "transitional"],
+    "connections": ["tide_chapel_sanctum", "saint_vaelor_outer_ridge", "gilded_vice_approach"],
+    "npcs_present": [],
+    "faction_presence": {},
+    "access": "open",
+    "notable": ["damon_elira_first_crossing_happened_here"]
+  },
+  "saint_vaelor_outer_ridge": {
+    "id": "saint_vaelor_outer_ridge",
+    "name": "Saint Vaelor — Outer Ridge",
+    "region": "coastal_midlands",
+    "type": "travel_waypoint",
+    "description": "The ridge below the sanctum. Storm-stairs carved into the cliffside above. Below: the path west. The three of them — Damon, Kest, Carrow — are here now, moving away from what was proved and toward what must be repaired.",
+    "atmosphere": ["transitional", "post_revelation", "wet", "exposed"],
+    "connections": ["saint_vaelor_sanctum", "sablewake_road"],
+    "npcs_present": ["kest", "brother_carrow"],
+    "faction_presence": {"saint_vaelor_old_tide_law": "residual"},
+    "access": "open",
+    "current_scene": true,
+    "notable": ["claimant_proof_complete", "western_node_destination_known"]
+  },
+  "saint_vaelor_sanctum": {
+    "id": "saint_vaelor_sanctum",
+    "name": "Saint Vaelor — Inner Sanctum",
+    "region": "coastal_midlands",
+    "type": "ritual_site_major",
+    "description": "The renewal chamber. Old witness protocols carved into every surface. The claimant imprint is done. The cistern is empty. The lower vault is open and the hostile registry remnant is ash.",
+    "atmosphere": ["ancient", "sealed", "completed", "legalistic", "haunted"],
+    "connections": ["saint_vaelor_outer_ridge"],
+    "npcs_present": ["brother_carrow"],
+    "faction_presence": {
+      "saint_vaelor_old_tide_law": "active_keyed_to_damon",
+      "iverian_empire": "hostile_if_discovered"
+    },
+    "access": "claimant_keyed",
+    "notable": [
+      "claimant_imprint_complete",
+      "lower_witness_vault_opened",
+      "malrec_bronze_tablet_recovered",
+      "hostile_registry_remnant_destroyed"
+    ]
+  },
+  "sablewake_road": {
+    "id": "sablewake_road",
+    "name": "Road to Sablewake",
+    "region": "western_coastal",
+    "type": "travel_route",
+    "description": "Three days west along the coast. The road narrows as it approaches the harbor city. Black Tide shipping markers appear on milestone posts — subtle, readable only if you know what you're looking at. Kest knows.",
+    "atmosphere": ["tense", "transitional", "watched", "western"],
+    "connections": ["saint_vaelor_outer_ridge", "sablewake_harbor"],
+    "npcs_present": [],
+    "faction_presence": {"black_tide": "monitoring_routes"},
+    "access": "open",
+    "travel_days": 3,
+    "encounter_table": "road_to_sablewake"
+  },
+  "sablewake_harbor": {
+    "id": "sablewake_harbor",
+    "name": "Sablewake — Harbor District",
+    "region": "sablewake",
+    "type": "city_district",
+    "description": "A working harbor built over older stone. The courtesy houses are visible from the docks — their lanterns are a specific amber color that marks private custody access. Salt, tar, old money, and the quiet violence of a city that profits from not asking questions.",
+    "atmosphere": ["coastal", "political", "dangerous", "layered", "amber_lit"],
+    "connections": ["sablewake_road", "sablewake_upper_city", "gilded_vice_approach", "sablewake_dockside"],
+    "npcs_present": ["brannock_hale"],
+    "faction_presence": {
+      "black_tide": "dominant",
+      "iverian_empire": "nominal_presence_only",
+      "western_courtesy_custody_network": "operating"
+    },
+    "access": "open_but_watched",
+    "notable": ["courtesy_mark_required_for_lower_access", "brannock_hale_is_here"]
+  },
+  "sablewake_dockside": {
+    "id": "sablewake_dockside",
+    "name": "Sablewake — Dockside",
+    "region": "sablewake",
+    "type": "city_district",
+    "description": "The lower docks. Rougher than the harbor district. Sailors, courtesy-house runners, Black Tide-adjacent labor. The kind of place where Elira's token gets her through doors that money alone would not.",
+    "atmosphere": ["rough", "social", "improvisational", "black_tide_adjacent"],
+    "connections": ["sablewake_harbor", "gilded_vice_approach"],
+    "npcs_present": ["mara_veys"],
+    "faction_presence": {"black_tide": "operational"},
+    "access": "open",
+    "elira_scene": true
+  },
+  "sablewake_upper_city": {
+    "id": "sablewake_upper_city",
+    "name": "Sablewake — Upper City",
+    "region": "sablewake",
+    "type": "city_district",
+    "description": "Old money and older law. The courtesy houses here display their amber lanterns openly. Private guards in unmarked coats. Lord Saervan has rooms here, though he is rarely seen in them.",
+    "atmosphere": ["formal", "dangerous", "political", "private_law"],
+    "connections": ["sablewake_harbor", "gilded_vice_main_floor"],
+    "npcs_present": ["lord_saervan"],
+    "faction_presence": {
+      "black_tide": "political_layer",
+      "western_courtesy_custody_network": "front_operations"
+    },
+    "access": "courtesy_mark_preferred"
+  },
+  "gilded_vice_approach": {
+    "id": "gilded_vice_approach",
+    "name": "The Gilded Vice — Approach",
+    "region": "sablewake",
+    "type": "city_street",
+    "description": "The street outside The Gilded Vice. The building presents as a private gambling house and social club. The signage is tasteful. The door wardens are not. There is a second entrance around the side that courtesy-token holders use.",
+    "atmosphere": ["controlled", "watched", "social_dangerous", "amber_lit"],
+    "connections": ["sablewake_harbor", "gilded_vice_main_floor"],
+    "npcs_present": [],
+    "faction_presence": {"black_tide": "security_layer"},
+    "access": "invitation_or_token_or_force"
+  },
+  "gilded_vice_main_floor": {
+    "id": "gilded_vice_main_floor",
+    "name": "The Gilded Vice — Main Floor",
+    "region": "sablewake",
+    "type": "gambling_social_front",
+    "description": "Lacquered tables, expensive light, the sound of coin and controlled conversation. Everyone here is performing something. The staff moves with the practiced ease of people who have seen things they will not discuss. The lower access is behind a door marked as a private lounge.",
+    "atmosphere": ["elegant", "dangerous", "performative", "black_tide_front"],
+    "connections": ["gilded_vice_approach", "gilded_vice_lower_access"],
+    "npcs_present": ["lord_saervan", "mara_veys"],
+    "faction_presence": {
+      "black_tide": "operational_front",
+      "western_courtesy_custody_network": "entrance_layer"
+    },
+    "access": "token_or_invitation",
+    "lower_access_visible": true
+  },
+  "gilded_vice_lower_access": {
+    "id": "gilded_vice_lower_access",
+    "name": "The Gilded Vice — Lower Access",
+    "region": "sablewake",
+    "type": "private_custody_passage",
+    "description": "Below the gambling floor, through the private lounge, past a door that opens to old stone that was here long before The Gilded Vice was built. The passage smells like the tide chapel. The Western Node is at the end of it.",
+    "atmosphere": ["ancient", "sealed", "significant", "final"],
+    "connections": ["gilded_vice_main_floor", "western_node_chamber"],
+    "npcs_present": [],
+    "faction_presence": {"western_courtesy_custody_network": "active_custody"},
+    "access": "courtesy_mark_or_claimant_override",
+    "notable": ["western_node_entrance", "displaced_witness_is_here"]
+  },
+  "western_node_chamber": {
+    "id": "western_node_chamber",
+    "name": "The Western Node",
+    "region": "sablewake_deep",
+    "type": "succession_repair_chamber",
+    "description": "A chamber that predates everything above it. The stone is tide-law carved — the same hand as Saint Vaelor, but older. The displaced witness is here, still active, waiting for a verified claimant to complete the repair. This is the end of the broken chain. The repair happens here or it does not happen.",
+    "atmosphere": ["ancient", "significant", "legalistic", "final", "haunted"],
+    "connections": ["gilded_vice_lower_access"],
+    "npcs_present": [],
+    "faction_presence": {
+      "western_courtesy_custody_network": "custodial",
+      "saint_vaelor_old_tide_law": "resonant"
+    },
+    "access": "courtesy_mark_plus_claimant_or_claimant_override_loud",
+    "notable": ["displaced_witness_active", "succession_repair_possible_here"]
+  }
+}

@@ -11,6 +11,15 @@ from engine.combat import CombatEngine, Combatant
 from engine.world import get_world
 from engine.chapter import get_chapter_engine, SwitchTrigger
 from engine.crossrail import get_crossrail
+from engine.scene import (
+    get_location, draw_encounter, check_scripted_beats,
+    fire_beat, resolve_travel, build_scene_context
+)
+from game.quest import QuestStatus
+from engine.scene import (
+    get_location, draw_encounter, check_scripted_beats,
+    fire_beat, resolve_travel, build_scene_context
+)
 from llm.client import narrate_streaming, is_configured
 from llm.prompts import SYSTEM_PROMPT, build_turn_payload, build_scene_intro_payload
 from llm.parser import parse_intent, get_default_check
@@ -76,7 +85,7 @@ class GameLoop:
             META = {"quit", "exit", "save", "help", "status", "inv",
                     "inventory", "party", "flags", "fight", "inspect",
                     "npc", "faction", "roll", "check",
-                    "pov", "switch", "chapters", "crossrail"}
+                    "pov", "switch", "chapters", "crossrail", "travel", "scene", "encounter", "location"}
             if cmd in META:
                 self.handle_meta_command(cmd, args)
             else:
@@ -133,6 +142,14 @@ class GameLoop:
             rail = state.rails.get(state.active_pov)
             if rail and rail.pending_switch_to:
                 self._execute_pov_switch(rail.pending_switch_to, rail.last_switch_trigger)
+
+        # Log the action
+        state.event_log.record(
+            state.turn, state.active_pov,
+            state.scene.location, "action",
+            f"{intent.category}: {raw_input[:60]}",
+            mechanical={"outcome": outcome_summary},
+        )
 
         save(state)
 
@@ -291,6 +308,14 @@ class GameLoop:
                 self.display.print_error("Usage: faction <faction_id>")
         elif cmd in ("roll", "check"):
             self._handle_roll(args, active)
+        elif cmd == "quests":
+            self._handle_quests_command(args)
+        elif cmd == "log":
+            self._handle_log_command()
+        elif cmd == "location":
+            self._handle_location_command()
+        elif cmd == "travel":
+            self._handle_travel_command(args)
         elif cmd == "pov":
             self._handle_pov_command(args)
         elif cmd == "switch":
@@ -299,6 +324,14 @@ class GameLoop:
             self._handle_chapters_command()
         elif cmd == "crossrail":
             self._handle_crossrail_command()
+        elif cmd == "travel":
+            self._handle_travel_command(args)
+        elif cmd in ("location", "loc"):
+            self._handle_location_command(args)
+        elif cmd == "encounter":
+            self._handle_encounter_command()
+        elif cmd == "scene":
+            self._handle_scene_command(args)
 
     def _handle_roll(self, args, character):
         if len(args) < 2:
@@ -318,6 +351,336 @@ class GameLoop:
         self.display.render_roll(result, stat, active.name)
         self.state.advance_turn()
         save(self.state)
+
+    def _handle_travel_command(self, args: list[str]):
+        """travel <destination_id>  — resolve travel to a location."""
+        state = self.state
+        active = state.get_active_character()
+        if not active:
+            return
+        if not args:
+            # Show available connections from current location
+            loc = get_location(state.scene.location)
+            if loc:
+                connections = loc.get("connections", [])
+                console.print(f"[dim]Current:[/] {loc["name"]}")
+                console.print("[dim]Connections:[/]")
+                for c in connections:
+                    dest = get_location(c)
+                    name = dest["name"] if dest else c
+                    console.print(f"  [cyan]{c}[/]  {name}")
+            else:
+                self.display.print_error("Unknown current location.")
+            return
+
+        destination = args[0].lower()
+        dest_loc = get_location(destination)
+        if not dest_loc:
+            self.display.print_error(f"Unknown location: '{destination}'")
+            return
+
+        self.display.print_info(f"Traveling to {dest_loc["name"]}...")
+
+        result = resolve_travel(
+            from_location=state.scene.location,
+            to_location=destination,
+            pov=state.active_pov,
+            state=state,
+        )
+
+        # Display encounters
+        if result.encounters:
+            for enc in result.encounters:
+                self.display.render_encounter(enc)
+                if enc.roll_needed:
+                    from engine.rules import skill_check
+                    modifier = active.stat_modifier(enc.stat)
+                    roll = skill_check(modifier, enc.dc)
+                    self.display.render_roll(roll, enc.stat, active.name)
+
+                    # Apply flags and damage
+                    if roll.passed():
+                        for k, v in enc.flags_set.items():
+                            state.flags.set(k, v)
+                        console.print(f"[green]{enc.success_outcome}[/]")
+                    else:
+                        for k, v in enc.flags_set_on_failure.items():
+                            state.flags.set(k, v)
+                        console.print(f"[red]{enc.failure_outcome}[/]")
+                        if enc.damage_on_failure:
+                            from engine.rules import roll_damage
+                            dmg = roll_damage(enc.damage_on_failure)
+                            active.hp = max(0, active.hp - dmg)
+                            self.display.print_info(f"{active.name} takes {dmg} damage. HP: {active.hp}/{active.max_hp}")
+                else:
+                    # Auto-fires, no roll
+                    for k, v in enc.flags_set.items():
+                        state.flags.set(k, v)
+                    console.print(f"[dim]{enc.success_outcome}[/]")
+
+        # Display fired beats
+        if result.beats_fired:
+            for bid in result.beats_fired:
+                self.display.print_info(f"[Story beat: {bid}]")
+
+        # Arrival flags
+        for k, v in result.arrival_flags.items():
+            self.display.print_info(f"Flag set: {k} = {v}")
+
+        # Crossrail tick
+        crossrail = get_crossrail()
+        fired = crossrail.check_and_fire(state.flags)
+        for event in fired:
+            state.crossrail_fired.append(event.id)
+            self.display.print_info(f"[World] {event.description}")
+
+        state.scene.location = destination
+        state.advance_turn()
+        from game.save_load import save
+        # Log the action
+        state.event_log.record(
+            state.turn, state.active_pov,
+            state.scene.location, "action",
+            f"{intent.category}: {raw_input[:60]}",
+            mechanical={"outcome": outcome_summary},
+        )
+
+        save(state)
+
+        if self.llm_enabled:
+            from llm.prompts import build_scene_intro_payload
+            payload = build_scene_intro_payload(state)
+            self._stream_narration(payload)
+
+    def _handle_location_command(self, args: list[str]):
+        """location [location_id]  — inspect a location record."""
+        if args:
+            loc_id = "_".join(args)
+        else:
+            loc_id = self.state.scene.location
+        loc = get_location(loc_id)
+        if not loc:
+            self.display.print_error(f"Unknown location: {loc_id}")
+            return
+        self.display.render_location(loc)
+
+    def _handle_encounter_command(self):
+        """encounter  — manually trigger an encounter for current location."""
+        state = self.state
+        active = state.get_active_character()
+        loc = get_location(state.scene.location)
+        if not loc:
+            self.display.print_error("No encounter table for current location.")
+            return
+        table_id = loc.get("encounter_table", state.scene.location)
+        enc = draw_encounter(table_id)
+        if not enc:
+            self.display.print_error(f"No encounter table found for '{table_id}'.")
+            return
+        self.display.render_encounter(enc)
+        if enc.roll_needed and active:
+            from engine.rules import skill_check
+            modifier = active.stat_modifier(enc.stat)
+            roll = skill_check(modifier, enc.dc)
+            self.display.render_roll(roll, enc.stat, active.name)
+            if roll.passed():
+                for k, v in enc.flags_set.items():
+                    state.flags.set(k, v)
+                console.print(f"[green]{enc.success_outcome}[/]")
+            else:
+                for k, v in enc.flags_set_on_failure.items():
+                    state.flags.set(k, v)
+                console.print(f"[red]{enc.failure_outcome}[/]")
+                if enc.damage_on_failure:
+                    from engine.rules import roll_damage
+                    dmg = roll_damage(enc.damage_on_failure)
+                    active.hp = max(0, active.hp - dmg)
+                    self.display.print_info(f"{active.name} takes {dmg} damage.")
+        state.advance_turn()
+        from game.save_load import save
+        save(state)
+
+    def _handle_scene_command(self, args: list[str]):
+        """scene  — show full scene context for current location."""
+        state = self.state
+        ctx = build_scene_context(state.scene.location, state.active_pov, state)
+        console.print()
+        from rich.panel import Panel
+        console.print(Panel(ctx, title="Scene Context", border_style="dim"))
+
+        # Check and fire any pending scripted beats
+        beats = check_scripted_beats(state.scene.location, state.active_pov, state.flags)
+        if beats:
+            for beat in beats:
+                self.display.print_info(f"[Beat ready: {beat.id}]")
+                self.display.print_info(beat.description)
+                effects = fire_beat(beat, state)
+                if effects:
+                    self.display.print_info(f"Effects: {effects}")
+
+    def _handle_quests_command(self, args: list[str]):
+        state = self.state
+        pov = state.active_pov
+        from rich.table import Table
+        from rich import box
+        quests = state.quest_manager.active_quests(pov)
+        locked = [q for q in state.quest_manager.quests.values()
+                  if q.status.value == "locked" and q.pov in (pov, "shared")]
+        done   = [q for q in state.quest_manager.quests.values()
+                  if q.status.value in ("complete","failed") and q.pov in (pov,"shared")]
+
+        t = Table(title=f"Quests — {pov.upper()}", box=box.SIMPLE_HEAD)
+        t.add_column("Status", width=10)
+        t.add_column("Title")
+        t.add_column("Current Stage", style="dim")
+
+        for q in quests:
+            stage = q.current_stage()
+            stage_str = stage.description if stage else "[green]all stages done[/]"
+            t.add_row("[cyan]ACTIVE[/]", q.title, stage_str)
+        for q in locked:
+            t.add_row("[dim]LOCKED[/]", f"[dim]{q.title}[/]", "[dim]prereqs not met[/]")
+        for q in done:
+            color = "green" if q.status.value == "complete" else "red"
+            t.add_row(f"[{color}]{q.status.value.upper()}[/]", q.title, "")
+        console.print(t)
+
+        if args and args[0] in state.quest_manager.quests:
+            q = state.quest_manager.get(args[0])
+            console.print(f"
+[bold]{q.title}[/]
+{q.description}")
+            if q.notes:
+                console.print("[dim]Notes:[/]")
+                for n in q.notes:
+                    console.print(f"  • {n}")
+
+    def _handle_log_command(self):
+        entries = self.state.event_log.recent(15)
+        if not entries:
+            self.display.print_info("No events recorded yet.")
+            return
+        from rich.table import Table
+        from rich import box
+        t = Table(title="Recent Events", box=box.SIMPLE)
+        t.add_column("Turn", style="dim", width=5)
+        t.add_column("POV", width=6)
+        t.add_column("Type", width=10)
+        t.add_column("Summary")
+        for e in entries:
+            pov_color = "steel_blue" if e.pov == "damon" else "gold1"
+            t.add_row(
+                str(e.turn),
+                f"[{pov_color}]{e.pov}[/]",
+                f"[dim]{e.event_type}[/]",
+                e.summary,
+            )
+        console.print(t)
+
+    def _handle_location_command(self):
+        state = self.state
+        loc = get_location(state.scene.location)
+        if not loc:
+            self.display.print_error(f"No location data for: {state.scene.location}")
+            return
+        from rich.panel import Panel
+        atmosphere = ", ".join(loc.get("atmosphere", []))
+        npcs = ", ".join(loc.get("npcs_present", [])) or "none"
+        factions = ", ".join(
+            f"{f} ({s})" for f,s in loc.get("faction_presence",{}).items()
+        ) or "none"
+        connections = ", ".join(loc.get("connections", []))
+        notable = "; ".join(loc.get("notable", [])) or "none"
+        console.print(Panel(
+            f"[bold]{loc['name']}[/]
+"
+            f"[dim]{loc.get('description','')}[/]
+
+"
+            f"[dim]Atmosphere:[/] {atmosphere}
+"
+            f"[dim]NPCs:[/] {npcs}
+"
+            f"[dim]Factions:[/] {factions}
+"
+            f"[dim]Connections:[/] {connections}
+"
+            f"[dim]Notable:[/] {notable}
+"
+            f"[dim]Access:[/] {loc.get('access','open')}",
+            border_style="dim steel_blue",
+            padding=(0,2),
+        ))
+
+    def _handle_travel_command(self, args: list[str]):
+        state = self.state
+        if not args:
+            loc = get_location(state.scene.location)
+            if loc:
+                conns = loc.get("connections", [])
+                self.display.print_info(f"Connections from here: {', '.join(conns)}")
+            else:
+                self.display.print_error("Usage: travel <destination_id>")
+            return
+
+        destination = "_".join(args)
+        current = state.scene.location
+        loc = get_location(current)
+        if loc and destination not in loc.get("connections", []):
+            self.display.print_error(
+                f"'{destination}' is not directly connected from {current}.
+"
+                f"Connections: {', '.join(loc.get('connections',[]))}")
+            return
+
+        result = resolve_travel(current, destination, state.active_pov, state)
+        self.display.print_info(f"Traveling to {destination} ({result.days} day(s))...")
+
+        for enc in result.encounters:
+            console.print(f"
+[yellow]Encounter:[/] {enc.description}")
+            if enc.roll_needed:
+                from engine.rules import skill_check
+                active = state.get_active_character()
+                modifier = active.stat_modifier(enc.stat)
+                roll = skill_check(modifier, enc.dc)
+                self.display.render_roll(roll, enc.stat, active.name)
+                outcome = enc.success_outcome if roll.passed() else enc.failure_outcome
+                console.print(f"[dim]{outcome}[/]")
+                if not roll.passed():
+                    for k,v in enc.flags_set_on_failure.items():
+                        state.flags.set(k, v)
+                    if enc.damage_on_failure:
+                        from engine.rules import roll_damage
+                        dmg = roll_damage(enc.damage_on_failure)
+                        active.hp = max(0, active.hp - dmg)
+                        self.display.print_info(f"Damage: {dmg}. HP now {active.hp}/{active.max_hp}")
+                else:
+                    for k,v in enc.flags_set.items():
+                        state.flags.set(k, v)
+
+        for beat_id in result.beats_fired:
+            self.display.print_info(f"[Scene] {beat_id}")
+
+        if result.arrival_flags:
+            for k,v in result.arrival_flags.items():
+                self.display.print_info(f"[Flag] {k} = {v}")
+
+        state.event_log.record(
+            state.turn, state.active_pov, destination, "travel",
+            f"Traveled {current} → {destination}. Encounters: {len(result.encounters)}"
+        )
+
+        crossrail = get_crossrail()
+        newly_fired = crossrail.check_and_fire(state.flags)
+        for event in newly_fired:
+            state.crossrail_fired.append(event.id)
+            self.display.print_info(f"[World] {event.description}")
+
+        save(state)
+        if self.llm_enabled:
+            from llm.prompts import build_scene_intro_payload
+            self._stream_scene_intro()
 
     def _execute_pov_switch(self, new_pov: str, trigger: str = "manual"):
         """Execute a POV switch with chapter card display."""
